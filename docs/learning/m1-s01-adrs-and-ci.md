@@ -113,7 +113,7 @@ parses as the **boolean `True`**, not the string `"on"`. That is why the
 validation script in this slice reads:
 
 ```python
-key = True if True in d else 'on'
+key = True if True in d else "on"
 ```
 
 GitHub handles this correctly, so it does not affect us in practice — but it
@@ -289,6 +289,24 @@ why this slice's exit criterion required a deliberate failure.
 
 **Local and CI must run the same commands**, or you maintain two definitions of
 correct and trust neither.
+
+**`ruff format` reformats Python code blocks inside Markdown.** This one was
+found the hard way, by this very slice. The first version of *this file* used
+single quotes inside a ` ```python ` block; ruff's default quote style is
+double, so `ruff format --check .` failed — and CI went red on a commit that
+touched nothing but documentation.
+
+Two lessons, and the second is the real one:
+
+1. Prose files are not outside the toolchain. A fenced `python` block is code as
+   far as ruff is concerned.
+2. **Run the gate after your last edit, not before it.** `make lint` had passed
+   — before the Markdown was written. The `CLAUDE.md` "before you finish"
+   checklist exists for exactly this, and skipping it because "it's only docs"
+   is how it gets skipped every time.
+
+It is a fitting failure for the slice that built the gate: the gate caught a
+mistake its own author made, in the file describing the gate.
 
 ---
 
