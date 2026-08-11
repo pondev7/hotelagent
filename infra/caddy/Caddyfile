@@ -1,0 +1,19 @@
+# Stage 1 reverse proxy. Caddy obtains and renews TLS certificates
+# automatically, which is the whole reason it is here rather than nginx.
+#
+# Set DOMAIN in the environment on the VM before `docker compose -f
+# docker-compose.prod.yml up`.
+
+{$DOMAIN} {
+	encode gzip
+
+	# The API owns its own routes; everything else is the ops console.
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy ops:3000
+	}
+}

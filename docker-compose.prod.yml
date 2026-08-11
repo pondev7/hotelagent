@@ -1,0 +1,73 @@
+# Stage 1 production stack: one small VM running this file behind Caddy.
+#
+# Same images and same env-var contract as docker-compose.yml — that
+# interchangeability is what makes the hosting ladder in milestones.md §5 a
+# config change rather than a migration project. Differences from local are
+# only: no source mounts, no --reload, no host port exposure except Caddy,
+# and secrets supplied from a real .env rather than inline defaults.
+
+name: hotelagent
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - ops
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    command: uvicorn hotelagent.main:app --host 0.0.0.0 --port 8000
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  ops:
+    build:
+      context: ./apps/ops
+    restart: unless-stopped
+    command: npm run start
+    env_file: .env
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
