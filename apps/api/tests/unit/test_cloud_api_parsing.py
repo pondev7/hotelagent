@@ -162,10 +162,11 @@ def test_an_empty_payload_yields_nothing() -> None:
 def test_status_receipts_are_carried_separately() -> None:
     payload = _envelope()
     payload["entry"][0]["changes"][0]["value"]["statuses"] = [
-        {"id": "wamid.ABC", "status": "delivered"}
+        {"id": "wamid.ABC", "status": "delivered", "timestamp": "1786470000"}
     ]
 
     batch = parse_webhook(payload)
 
     assert batch.messages == []
-    assert batch.statuses[0]["status"] == "delivered"
+    assert batch.statuses[0].external_message_id == "wamid.ABC"
+    assert batch.statuses[0].state == "delivered"

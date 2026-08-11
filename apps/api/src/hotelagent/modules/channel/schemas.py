@@ -14,6 +14,7 @@ to speak WhatsApp is the rewrite invariant #2 exists to prevent.
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -67,6 +68,42 @@ class InboundMessage(BaseModel):
     replies_to_external_id: str | None = None
 
 
+class ReplyButton(BaseModel):
+    """A quick-reply button.
+
+    `id` is what comes back when the traveller taps it — the stable machine
+    value. `title` is what they read. Keeping them separate means the visible
+    wording can change, or be translated, without breaking the handler that
+    reads the reply.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    title: str
+
+
+class OutboundResult(BaseModel):
+    """What a channel says about a message we asked it to send."""
+
+    model_config = ConfigDict(frozen=True)
+
+    external_message_id: str | None = None
+    accepted: bool = True
+    error: str | None = None
+
+
+class DeliveryStatus(BaseModel):
+    """A receipt for a message we sent earlier."""
+
+    model_config = ConfigDict(frozen=True)
+
+    external_message_id: str
+    state: Literal["sent", "delivered", "read", "failed"]
+    occurred_at: datetime
+    error: str | None = None
+
+
 class InboundBatch(BaseModel):
     """A single webhook delivery, which may carry several messages.
 
@@ -77,6 +114,5 @@ class InboundBatch(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     messages: list[InboundMessage] = Field(default_factory=list)
-    # Delivery/read receipts arrive on the same webhook. Parsed and carried so
-    # the shape is right; consumed in S05 with the outbound path.
-    statuses: list[dict[str, object]] = Field(default_factory=list)
+    # Delivery and read receipts arrive on the same webhook as messages.
+    statuses: list[DeliveryStatus] = Field(default_factory=list)

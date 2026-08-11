@@ -61,6 +61,20 @@ class Settings(BaseSettings):
     # number or entry point exists.
     default_city_slug: str = "kanyakumari"
 
+    # Sending credentials. The token is a secret and is never logged.
+    whatsapp_access_token: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_api_base_url: str = "https://graph.facebook.com"
+    whatsapp_api_version: str = "v21.0"
+
+    # --- Outbound HTTP ---------------------------------------------------
+    # Every outbound call is bounded. A request with no timeout can hang for
+    # as long as the peer keeps the socket open, and one hung coroutine per
+    # stuck conversation is how an event loop quietly fills up.
+    http_timeout_seconds: float = 10.0
+    # Total attempts, not retries — 3 means one try plus two retries.
+    http_max_attempts: int = 3
+
     # Object storage is reached through the S3-compatible API only, so the same
     # code path serves R2, S3 and MinIO. Unset until media handling lands.
     s3_endpoint: str = ""

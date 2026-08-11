@@ -15,7 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from hotelagent.db.base import Base
 from hotelagent.db.mixins import CityScopedMixin, IdMixin, TimestampMixin
-from hotelagent.enums import AutomationLevel, Channel, MessageType
+from hotelagent.enums import AutomationLevel, Channel, MessageType, SenderKind
 
 
 class ConversationState(enum.StrEnum):
@@ -29,21 +29,6 @@ class ConversationState(enum.StrEnum):
 class MessageDirection(enum.StrEnum):
     INBOUND = "inbound"
     OUTBOUND = "outbound"
-
-
-class SenderKind(enum.StrEnum):
-    """Who composed an outbound message.
-
-    This is an internal fact and never surfaces to the traveller — the persona
-    is single and constant (`docs/vision.md` §4.1). It exists because the share
-    of messages sent by AGENT versus OPERATOR is the containment metric the
-    whole automation ladder is measured by.
-    """
-
-    CUSTOMER = "customer"
-    OPERATOR = "operator"
-    AGENT = "agent"
-    SYSTEM = "system"
 
 
 class User(Base, IdMixin, TimestampMixin):

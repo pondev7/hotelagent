@@ -15,7 +15,15 @@ from typing import Any
 from uuid import uuid4
 
 from hotelagent.enums import Channel, MessageType
-from hotelagent.modules.channel.schemas import InboundBatch, InboundMessage
+from hotelagent.logging import body_shape, get_logger, redact_identifier
+from hotelagent.modules.channel.schemas import (
+    InboundBatch,
+    InboundMessage,
+    OutboundResult,
+    ReplyButton,
+)
+
+log = get_logger(__name__)
 
 
 def parse_webhook(payload: dict[str, Any]) -> InboundBatch:
@@ -38,3 +46,46 @@ def parse_webhook(payload: dict[str, Any]) -> InboundBatch:
         sent_at=datetime.now(UTC),
     )
     return InboundBatch(messages=[message])
+
+
+# --- Sending ---------------------------------------------------------------
+#
+# "Sending" in development means recording. Outbound messages are appended to
+# a module-level list and logged, so a test or a curl session can see exactly
+# what would have gone to the traveller without a Meta account, a token, or a
+# public URL.
+
+_SENT: list[dict[str, Any]] = []
+
+
+def sent_messages() -> list[dict[str, Any]]:
+    """Everything the console adapter has "sent" this process."""
+    return list(_SENT)
+
+
+def clear_sent() -> None:
+    _SENT.clear()
+
+
+async def send_text(*, to: str, text: str) -> OutboundResult:
+    record = {"to": to, "type": "text", "text": text}
+    _SENT.append(record)
+    log.info("channel.console.send", to=redact_identifier(to), **body_shape(text))
+    return OutboundResult(external_message_id=f"console-out-{uuid4().hex}")
+
+
+async def send_buttons(*, to: str, text: str, buttons: list[ReplyButton]) -> OutboundResult:
+    record = {
+        "to": to,
+        "type": "interactive",
+        "text": text,
+        "buttons": [b.model_dump() for b in buttons],
+    }
+    _SENT.append(record)
+    log.info(
+        "channel.console.send",
+        to=redact_identifier(to),
+        button_count=len(buttons),
+        **body_shape(text),
+    )
+    return OutboundResult(external_message_id=f"console-out-{uuid4().hex}")

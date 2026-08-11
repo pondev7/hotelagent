@@ -78,7 +78,7 @@ async def test_a_signed_delivery_persists_one_normalised_message(
     response = await client.post("/webhooks/whatsapp", content=body, headers=_signed(body))
 
     assert response.status_code == 200
-    assert response.json() == {"received": 1, "duplicates": 0}
+    assert response.json() == {"received": 1, "duplicates": 0, "statuses": 0}
 
     message = await session.scalar(select(Message))
     assert message is not None
@@ -110,9 +110,9 @@ async def test_redelivery_persists_exactly_one_message(
     second = await client.post("/webhooks/whatsapp", content=body, headers=headers)
     third = await client.post("/webhooks/whatsapp", content=body, headers=headers)
 
-    assert first.json() == {"received": 1, "duplicates": 0}
-    assert second.json() == {"received": 1, "duplicates": 1}
-    assert third.json() == {"received": 1, "duplicates": 1}
+    assert first.json() == {"received": 1, "duplicates": 0, "statuses": 0}
+    assert second.json() == {"received": 1, "duplicates": 1, "statuses": 0}
+    assert third.json() == {"received": 1, "duplicates": 1, "statuses": 0}
 
     assert await _count(session, Message) == 1
     assert await _count(session, User) == 1
@@ -176,7 +176,7 @@ async def test_two_messages_in_one_delivery_are_both_stored(
 
     response = await client.post("/webhooks/whatsapp", content=body, headers=_signed(body))
 
-    assert response.json() == {"received": 2, "duplicates": 0}
+    assert response.json() == {"received": 2, "duplicates": 0, "statuses": 0}
     assert await _count(session, Message) == 2
     assert await _count(session, Conversation) == 1, "both turns join one thread"
 
@@ -250,4 +250,4 @@ async def test_an_unparseable_body_does_not_trigger_a_retry_loop(
     )
 
     assert response.status_code == 200
-    assert response.json() == {"received": 0, "duplicates": 0}
+    assert response.json() == {"received": 0, "duplicates": 0, "statuses": 0}

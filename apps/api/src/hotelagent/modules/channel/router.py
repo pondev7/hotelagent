@@ -66,12 +66,20 @@ async def receive_webhook(
     except json.JSONDecodeError:
         # A body we cannot parse is not worth retrying, and Meta redelivers on
         # any non-2xx. Accept it and move on rather than inviting a retry loop.
-        return {"received": 0, "duplicates": 0}
+        return {"received": 0, "duplicates": 0, "statuses": 0}
 
     if not isinstance(payload, dict):
-        return {"received": 0, "duplicates": 0}
+        return {"received": 0, "duplicates": 0, "statuses": 0}
 
     batch = service.parse_payload(payload)
+
+    # Receipts first: they refer to messages we already sent, and applying them
+    # does not depend on anything the inbound messages do.
+    applied = await service.handle_statuses(session, batch)
+
+    if not batch.messages:
+        return {"received": 0, "duplicates": 0, "statuses": applied}
+
     try:
         recorded = await service.handle_inbound(session, batch)
     except service.ChannelConfigurationError as exc:
@@ -82,4 +90,5 @@ async def receive_webhook(
     return {
         "received": len(recorded),
         "duplicates": sum(1 for r in recorded if r.is_duplicate),
+        "statuses": applied,
     }

@@ -15,9 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from hotelagent.config import get_settings
 from hotelagent.db.session import get_session
+from hotelagent.logging import configure_logging
 from hotelagent.modules.channel.router import router as channel_router
 
 settings = get_settings()
+
+configure_logging(json_output=settings.log_json)
 
 app = FastAPI(
     title="HotelAgent API",

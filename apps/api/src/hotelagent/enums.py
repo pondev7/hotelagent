@@ -60,6 +60,22 @@ class MessageType(enum.StrEnum):
     UNSUPPORTED = "unsupported"  # a type we do not handle yet, recorded not dropped
 
 
+class SenderKind(enum.StrEnum):
+    """Who composed a message.
+
+    Shared because `channel` names it when sending and `conversation` stores
+    it. Internal only — the traveller sees one constant persona whichever this
+    says (`docs/vision.md` §4.1). It exists because the share of messages sent
+    by AGENT rather than OPERATOR is the containment metric the entire
+    automation ladder is measured by.
+    """
+
+    CUSTOMER = "customer"
+    OPERATOR = "operator"
+    AGENT = "agent"
+    SYSTEM = "system"
+
+
 class AutomationLevel(enum.StrEnum):
     """The Automation Governor's setting for a conversation (`docs/vision.md` §2.3).
 
