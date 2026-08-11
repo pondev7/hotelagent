@@ -58,7 +58,7 @@ Each learning file follows this structure:
 
 | # | Sub-milestone | Status | Learning file |
 |---|---|---|---|
-| S00 | Repository skeleton | ✅ built (`85a70c8`) | ⬜ not yet written |
+| S00 | Repository skeleton | ✅ built (`85a70c8`) | ✅ [m1-s00](learning/m1-s00-repository-skeleton.md) |
 | S01 | Decision records and CI gates | ⬜ | ⬜ |
 | S02 | Database foundations and the first migration | ⬜ | ⬜ |
 | S03 | The M1 entity set, event log and idempotency | ⬜ | ⬜ |
