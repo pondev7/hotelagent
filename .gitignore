@@ -1,0 +1,41 @@
+# secrets & local config
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# node
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
+# generated contracts (regenerate with `make contracts`)
+packages/contracts/openapi.json
+packages/contracts/src/generated.ts
+
+# local data
+data/
+backups/
+*.sql
+*.sql.gz
+
+# editors / os
+.DS_Store
+.idea/
+.vscode/
+!.vscode/extensions.json
