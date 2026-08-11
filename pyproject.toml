@@ -41,9 +41,12 @@ src = ["apps/api/src", "apps/api/tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "TID"]
 
-# Invariant #9 and the module boundary rule are enforced here, not just in review:
-# no module may import another module's internals, and no provider SDK may be
-# imported outside adapters/. Populated as modules land.
+# The module boundary rule and invariant #9 are enforced by
+# apps/api/tests/unit/test_module_boundaries.py, not here.
+#
+# ruff's banned-api is global, and these rules are contextual: `conversation`
+# may import its own models, `channel` may not. No global ban can say "except
+# from inside itself", so the check reads the source with `ast` instead.
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 
 [tool.mypy]
