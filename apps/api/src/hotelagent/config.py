@@ -29,8 +29,21 @@ class Settings(BaseSettings):
     log_json: bool = False
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
 
-    database_url: str = "postgresql+asyncpg://hotelagent:hotelagent@postgres:5432/hotelagent"
-    redis_url: str = "redis://redis:6379/0"
+    # Defaults target localhost, because host-side tooling (`make migrate`,
+    # pytest) runs outside the Compose network. Containers get the in-network
+    # hostnames injected by docker-compose.yml, which override these.
+    database_url: str = "postgresql+asyncpg://hotelagent:hotelagent@localhost:5432/hotelagent"
+    redis_url: str = "redis://localhost:6379/0"
+
+    # Integration tests run against a separate database so they never touch
+    # development data. Defaults to localhost because pytest runs on the host,
+    # outside the Compose network where the service is called "postgres".
+    test_database_url: str = (
+        "postgresql+asyncpg://hotelagent:hotelagent@localhost:5432/hotelagent_test"
+    )
+
+    # SQL echoed to the log. Useful when learning what the ORM actually emits.
+    database_echo: bool = False
 
     # Object storage is reached through the S3-compatible API only, so the same
     # code path serves R2, S3 and MinIO. Unset until media handling lands.

@@ -23,6 +23,31 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
+    # Integration tests need a real PostgreSQL. A service container runs
+    # alongside the job for its lifetime; the health options make the runner
+    # wait until Postgres actually accepts connections before the first step,
+    # otherwise the tests race the database's startup.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: hotelagent
+          POSTGRES_PASSWORD: hotelagent
+          POSTGRES_DB: hotelagent
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hotelagent -d hotelagent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # The service is published on the runner's localhost, matching the
+      # defaults in config.py.
+      HOTELAGENT_DATABASE_URL: postgresql+asyncpg://hotelagent:hotelagent@localhost:5432/hotelagent
+      HOTELAGENT_TEST_DATABASE_URL: postgresql+asyncpg://hotelagent:hotelagent@localhost:5432/hotelagent_test
+
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
