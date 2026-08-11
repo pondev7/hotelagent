@@ -63,7 +63,7 @@ Each learning file follows this structure:
 | S02 | Database foundations and the first migration | ✅ built (`9a13836`) | ✅ [m1-s02](learning/m1-s02-database-foundations.md) |
 | S03 | The M1 entity set, event log and idempotency | ✅ built (`3cc7d70`) | ✅ [m1-s03](learning/m1-s03-entities-events-idempotency.md) |
 | S04 | Channel gateway — inbound | ✅ built (`8fe117b`) | ✅ [m1-s04](learning/m1-s04-channel-gateway-inbound.md) |
-| S05 | Channel gateway — outbound and conversation state | ⬜ | ⬜ |
+| S05 | Channel gateway — outbound and conversation state | ✅ built (`33c935b`) | ✅ [m1-s05](learning/m1-s05-channel-outbound.md) |
 | S06 | Availability router and the manual provider | ⬜ | ⬜ |
 | S07 | API surface and generated contracts | ⬜ | ⬜ |
 | S08 | Ops console shell and hotel directory | ⬜ | ⬜ |
