@@ -61,7 +61,7 @@ Each learning file follows this structure:
 | S00 | Repository skeleton | ✅ built (`85a70c8`) | ✅ [m1-s00](learning/m1-s00-repository-skeleton.md) |
 | S01 | Decision records and CI gates | ✅ built (`6355f1f`) | ✅ [m1-s01](learning/m1-s01-adrs-and-ci.md) |
 | S02 | Database foundations and the first migration | ✅ built (`9a13836`) | ✅ [m1-s02](learning/m1-s02-database-foundations.md) |
-| S03 | The M1 entity set, event log and idempotency | ⬜ | ⬜ |
+| S03 | The M1 entity set, event log and idempotency | ✅ built (`3cc7d70`) | ✅ [m1-s03](learning/m1-s03-entities-events-idempotency.md) |
 | S04 | Channel gateway — inbound | ⬜ | ⬜ |
 | S05 | Channel gateway — outbound and conversation state | ⬜ | ⬜ |
 | S06 | Availability router and the manual provider | ⬜ | ⬜ |
