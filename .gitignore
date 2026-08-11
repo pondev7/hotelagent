@@ -23,6 +23,7 @@ node_modules/
 out/
 .turbo/
 *.tsbuildinfo
+next-env.d.ts
 
 # generated contracts (regenerate with `make contracts`)
 packages/contracts/openapi.json
