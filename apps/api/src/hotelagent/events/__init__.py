@@ -1,1 +1,5 @@
-"""Append-only event log and its publisher (invariant #6). Empty at slice 0."""
+"""Append-only event log and its enforcement (invariant #6)."""
+
+from hotelagent.events.append_only import AppendOnlyError, AppendOnlyMixin
+
+__all__ = ["AppendOnlyError", "AppendOnlyMixin"]

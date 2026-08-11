@@ -9,13 +9,14 @@ failing — but CI always provides one, so they always run there.
 """
 
 import asyncio
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from urllib.parse import urlparse
 
 import asyncpg
 import pytest
 from alembic.config import Config
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from hotelagent.config import get_settings
 
@@ -52,6 +53,35 @@ def test_database_url() -> str:
     except (OSError, asyncpg.PostgresError) as exc:
         pytest.skip(f"PostgreSQL unreachable at {urlparse(url).hostname}: {exc}. Run `make dev`.")
     return url
+
+
+@pytest.fixture
+def migrated(alembic_config: Config) -> Config:
+    """Schema at head.
+
+    Deliberately a **synchronous** fixture. Alembic calls `asyncio.run()`
+    inside `env.py`, and an async fixture already runs inside an event loop —
+    nesting them raises "asyncio.run() cannot be called from a running event
+    loop". Keeping the migration in sync-land avoids the whole problem.
+    """
+    from alembic import command
+
+    command.upgrade(alembic_config, "head")
+    return alembic_config
+
+
+@pytest.fixture
+async def session(migrated: Config, test_database_url: str) -> AsyncIterator[AsyncSession]:
+    """A session against a freshly migrated test database.
+
+    Transitively depends on `alembic_config`, so the schema is torn down after
+    each test and no test can see another's rows.
+    """
+    engine = create_async_engine(test_database_url)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as db_session:
+        yield db_session
+    await engine.dispose()
 
 
 @pytest.fixture

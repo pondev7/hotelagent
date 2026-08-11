@@ -33,6 +33,11 @@ def _table_names(url: str) -> set[str]:
     return {r["tablename"] for r in rows}
 
 
+def _enum_type_names(url: str) -> set[str]:
+    rows = asyncio.run(_inspect(url, "SELECT typname FROM pg_type WHERE typtype = 'e'"))
+    return {r["typname"] for r in rows}
+
+
 def _columns(url: str, table: str) -> dict[str, str]:
     rows = asyncio.run(
         _inspect(
@@ -66,14 +71,68 @@ def test_downgrade_reverses_the_migration(alembic_config: Config, test_database_
     assert "hotel" not in remaining
 
 
+TENANT_SCOPED_TABLES = [
+    "hotel",
+    "room_type",
+    "conversation",
+    "message",
+    "call_task",
+    "availability_observation",
+    "booking",
+    "booking_event",
+    "ledger_entry",
+]
+
+ALL_TABLES = {*TENANT_SCOPED_TABLES, "city", "app_user", "idempotency_key"}
+
+
 def test_every_tenant_scoped_table_carries_city_id(
     alembic_config: Config, test_database_url: str
 ) -> None:
     """Invariant #1. With one city this looks silly; adding it to a live
-    database with a year of bookings is a weekend of downtime."""
+    database with a year of bookings is a weekend of downtime.
+
+    `city` is the tenancy root and `app_user` is deliberately global — a
+    traveller may book in more than one city, and scoping them would fragment
+    exactly the history that makes repeat bookings valuable.
+    """
     command.upgrade(alembic_config, "head")
 
-    assert "city_id" in _columns(test_database_url, "hotel")
+    for table in TENANT_SCOPED_TABLES:
+        assert "city_id" in _columns(test_database_url, table), f"{table} is missing city_id"
+
+    assert "city_id" not in _columns(test_database_url, "app_user")
+
+
+def test_the_full_entity_set_exists(alembic_config: Config, test_database_url: str) -> None:
+    command.upgrade(alembic_config, "head")
+
+    assert _table_names(test_database_url) >= ALL_TABLES
+
+
+def test_re_upgrading_after_a_downgrade_succeeds(
+    alembic_config: Config, test_database_url: str
+) -> None:
+    """The test that catches the enum trap.
+
+    `DROP TABLE` leaves PostgreSQL enum types behind. A downgrade that forgets
+    to drop them appears to succeed, and the failure only surfaces here — on
+    the next upgrade, with "type already exists".
+    """
+    command.upgrade(alembic_config, "head")
+    command.downgrade(alembic_config, "base")
+    command.upgrade(alembic_config, "head")
+
+    assert _table_names(test_database_url) >= ALL_TABLES
+
+
+def test_downgrade_removes_every_enum_type(alembic_config: Config, test_database_url: str) -> None:
+    command.upgrade(alembic_config, "head")
+    assert _enum_type_names(test_database_url), "expected enum types after upgrade"
+
+    command.downgrade(alembic_config, "base")
+
+    assert _enum_type_names(test_database_url) == set()
 
 
 def test_money_is_numeric_and_timestamps_are_timezone_aware(

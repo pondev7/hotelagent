@@ -1,4 +1,4 @@
-"""Inventory tables: City and Hotel.
+"""Inventory tables: City, Hotel, RoomType.
 
 These are ORM models, and per the module boundary rule they are **private to
 this module**. No other module may import them; cross-module data crosses as
@@ -6,26 +6,16 @@ Pydantic schemas returned from `service.py`.
 """
 
 import enum
+import uuid
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, Enum, Numeric, String, Text
+from sqlalchemy import CheckConstraint, Enum, ForeignKey, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from hotelagent.db.base import Base
 from hotelagent.db.mixins import CityScopedMixin, IdMixin, TimestampMixin
-
-
-class IntegrationTier(enum.StrEnum):
-    """How we learn whether a room is free (`docs/vision.md` §2.4).
-
-    Every hotel launches at MANUAL. Commission is the incentive to climb, and
-    our cost falls exactly where our margin improves.
-    """
-
-    LIVE = "live"  # Tier A — calendar in our dashboard or a PMS. Instant, 11%.
-    BOT = "bot"  # Tier B — hotelier WhatsApp bot. 1-3 min, 13%.
-    MANUAL = "manual"  # Tier C — an operator telephones reception. 5-15 min, 15%.
+from hotelagent.enums import IntegrationTier
 
 
 class VerificationStatus(enum.StrEnum):
@@ -109,4 +99,29 @@ class Hotel(Base, IdMixin, CityScopedMixin, TimestampMixin):
             "commission_rate >= 0 AND commission_rate <= 100",
             name="commission_rate_is_a_percentage",
         ),
+    )
+
+
+class RoomType(Base, IdMixin, CityScopedMixin, TimestampMixin):
+    """A sellable room category. Rates live here at M1; per-date overrides
+    arrive with the Tier A availability calendar at M4."""
+
+    __tablename__ = "room_type"
+
+    hotel_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("hotel.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+
+    # Rack rate in INR. Numeric(12, 2), per CLAUDE.md.
+    base_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    capacity: Mapped[int] = mapped_column(nullable=False, default=2)
+    total_rooms: Mapped[int] = mapped_column(nullable=False, default=0)
+    amenities: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+
+    __table_args__ = (
+        CheckConstraint("base_price >= 0", name="base_price_is_not_negative"),
+        CheckConstraint("capacity > 0", name="capacity_is_positive"),
     )
