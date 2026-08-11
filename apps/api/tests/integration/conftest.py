@@ -9,16 +9,19 @@ failing — but CI always provides one, so they always run there.
 """
 
 import asyncio
+import uuid
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from urllib.parse import urlparse
 
 import asyncpg
+import httpx
 import pytest
 from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from hotelagent.config import get_settings
+from hotelagent.db.session import get_session
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 ALEMBIC_INI = REPO_ROOT / "apps" / "api" / "alembic.ini"
@@ -82,6 +85,50 @@ async def session(migrated: Config, test_database_url: str) -> AsyncIterator[Asy
     async with factory() as db_session:
         yield db_session
     await engine.dispose()
+
+
+@pytest.fixture
+def settings_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Let a test change configuration.
+
+    `get_settings` is `lru_cache`d, so the cache must be cleared after the
+    environment changes — and again afterwards, or the override leaks into
+    every later test in the session.
+    """
+    get_settings.cache_clear()
+    yield
+    monkeypatch.undo()
+    get_settings.cache_clear()
+
+
+@pytest.fixture
+async def seeded_city(session: AsyncSession) -> uuid.UUID:
+    """The one city M1 runs. The gateway resolves `city_id` from its slug."""
+    from hotelagent.modules.inventory.models import City
+
+    city = City(name="Kanyakumari", slug=get_settings().default_city_slug)
+    session.add(city)
+    await session.flush()
+    return city.id
+
+
+@pytest.fixture
+async def client(session: AsyncSession) -> AsyncIterator[httpx.AsyncClient]:
+    """An HTTP client whose requests share the test's session and transaction.
+
+    Overriding the dependency is why this works: the handler gets the test's
+    session, so nothing is committed and the schema teardown still cleans up.
+    """
+    from hotelagent.main import app
+
+    async def _use_test_session() -> AsyncIterator[AsyncSession]:
+        yield session
+
+    app.dependency_overrides[get_session] = _use_test_session
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
+        yield http_client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture

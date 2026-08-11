@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from hotelagent.config import get_settings
 from hotelagent.db.session import get_session
+from hotelagent.modules.channel.router import router as channel_router
 
 settings = get_settings()
 
@@ -22,6 +23,8 @@ app = FastAPI(
     title="HotelAgent API",
     version="0.1.0",
 )
+
+app.include_router(channel_router)
 
 app.add_middleware(
     CORSMiddleware,

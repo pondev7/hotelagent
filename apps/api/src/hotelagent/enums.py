@@ -42,6 +42,24 @@ class Channel(enum.StrEnum):
     CONSOLE = "console"  # the development adapter
 
 
+class MessageType(enum.StrEnum):
+    """The kind of a message, in our vocabulary rather than any provider's.
+
+    Shared because `channel` produces it while normalising an inbound payload
+    and `conversation` stores it — the two ends of invariant #2's boundary.
+    """
+
+    TEXT = "text"
+    IMAGE = "image"
+    AUDIO = "audio"
+    DOCUMENT = "document"
+    LOCATION = "location"
+    INTERACTIVE = "interactive"  # buttons and list replies
+    TEMPLATE = "template"
+    SYSTEM = "system"
+    UNSUPPORTED = "unsupported"  # a type we do not handle yet, recorded not dropped
+
+
 class AutomationLevel(enum.StrEnum):
     """The Automation Governor's setting for a conversation (`docs/vision.md` §2.3).
 

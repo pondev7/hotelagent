@@ -45,6 +45,22 @@ class Settings(BaseSettings):
     # SQL echoed to the log. Useful when learning what the ORM actually emits.
     database_echo: bool = False
 
+    # --- Channel ---------------------------------------------------------
+    # Which adapter serves the gateway. "console" needs no Meta account and no
+    # public URL, so the whole inbound flow is testable locally.
+    channel_adapter: Literal["cloud_api", "console"] = "console"
+
+    # Meta app secret, used to verify the X-Hub-Signature-256 header on every
+    # inbound webhook. An empty value means signature verification cannot pass.
+    whatsapp_app_secret: str = ""
+    # The token echoed back during Meta's GET subscription handshake.
+    whatsapp_verify_token: str = ""
+
+    # M1 runs one city. The gateway needs a city_id for every conversation
+    # (invariant #1), and resolves it from this slug until routing by phone
+    # number or entry point exists.
+    default_city_slug: str = "kanyakumari"
+
     # Object storage is reached through the S3-compatible API only, so the same
     # code path serves R2, S3 and MinIO. Unset until media handling lands.
     s3_endpoint: str = ""

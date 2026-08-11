@@ -15,7 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from hotelagent.db.base import Base
 from hotelagent.db.mixins import CityScopedMixin, IdMixin, TimestampMixin
-from hotelagent.enums import AutomationLevel, Channel
+from hotelagent.enums import AutomationLevel, Channel, MessageType
 
 
 class ConversationState(enum.StrEnum):
@@ -29,17 +29,6 @@ class ConversationState(enum.StrEnum):
 class MessageDirection(enum.StrEnum):
     INBOUND = "inbound"
     OUTBOUND = "outbound"
-
-
-class MessageType(enum.StrEnum):
-    TEXT = "text"
-    IMAGE = "image"
-    AUDIO = "audio"
-    DOCUMENT = "document"
-    LOCATION = "location"
-    INTERACTIVE = "interactive"  # buttons and list replies
-    TEMPLATE = "template"
-    SYSTEM = "system"
 
 
 class SenderKind(enum.StrEnum):
