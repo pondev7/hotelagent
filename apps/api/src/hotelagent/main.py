@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hotelagent.config import get_settings
+from hotelagent.db import registry as _registry  # noqa: F401  (populates Base.metadata)
 from hotelagent.db.session import get_session
 from hotelagent.logging import configure_logging
 from hotelagent.modules.channel.router import router as channel_router

@@ -60,6 +60,22 @@ class MessageType(enum.StrEnum):
     UNSUPPORTED = "unsupported"  # a type we do not handle yet, recorded not dropped
 
 
+class CallOutcome(enum.StrEnum):
+    """What an operator learned by telephoning a hotel.
+
+    Shared because `availability` produces it when resolving a pending check
+    and `ops` stores it on the call task. NO_ANSWER and UNREACHABLE are
+    deliberately distinct from UNAVAILABLE: "we could not ask" is not the same
+    fact as "there is no room", and conflating them would poison the dataset
+    invariant #8 exists to build.
+    """
+
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+    NO_ANSWER = "no_answer"
+    UNREACHABLE = "unreachable"
+
+
 class SenderKind(enum.StrEnum):
     """Who composed a message.
 

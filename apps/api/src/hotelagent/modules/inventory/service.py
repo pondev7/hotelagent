@@ -10,7 +10,8 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from hotelagent.modules.inventory.models import City
+from hotelagent.modules.inventory.models import City, Hotel
+from hotelagent.modules.inventory.schemas import HotelAvailabilityContext
 
 
 async def get_city_id_by_slug(session: AsyncSession, slug: str) -> uuid.UUID | None:
@@ -27,3 +28,24 @@ async def get_city_id_by_slug(session: AsyncSession, slug: str) -> uuid.UUID | N
         select(City.id).where(City.slug == slug, City.is_active)
     )
     return city_id
+
+
+async def get_hotel_for_availability(
+    session: AsyncSession, hotel_id: uuid.UUID
+) -> HotelAvailabilityContext | None:
+    """The narrow view of a hotel that the availability router needs.
+
+    Returns a Pydantic schema, never the ORM object — the router must not be
+    able to reach the rest of the hotel record, let alone mutate it.
+    """
+    hotel = await session.get(Hotel, hotel_id)
+    if hotel is None:
+        return None
+    return HotelAvailabilityContext(
+        hotel_id=hotel.id,
+        city_id=hotel.city_id,
+        name=hotel.name,
+        integration_tier=hotel.integration_tier,
+        reception_phone=hotel.reception_phone,
+        is_active=hotel.is_active,
+    )

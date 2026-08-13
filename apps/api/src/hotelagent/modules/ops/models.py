@@ -15,6 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from hotelagent.db.base import Base
 from hotelagent.db.mixins import CityScopedMixin, IdMixin, TimestampMixin
+from hotelagent.enums import CallOutcome
 
 
 class CallTaskStatus(enum.StrEnum):
@@ -23,13 +24,6 @@ class CallTaskStatus(enum.StrEnum):
     RESOLVED = "resolved"
     CANCELLED = "cancelled"  # the traveller went quiet or chose elsewhere
     EXPIRED = "expired"
-
-
-class CallTaskOutcome(enum.StrEnum):
-    AVAILABLE = "available"
-    UNAVAILABLE = "unavailable"
-    NO_ANSWER = "no_answer"
-    UNREACHABLE = "unreachable"
 
 
 class CallTask(Base, IdMixin, CityScopedMixin, TimestampMixin):
@@ -62,9 +56,9 @@ class CallTask(Base, IdMixin, CityScopedMixin, TimestampMixin):
         nullable=False,
         default=CallTaskStatus.OPEN,
     )
-    outcome: Mapped[CallTaskOutcome | None] = mapped_column(
+    outcome: Mapped[CallOutcome | None] = mapped_column(
         Enum(
-            CallTaskOutcome,
+            CallOutcome,
             name="call_task_outcome",
             native_enum=True,
             values_callable=lambda e: [m.value for m in e],

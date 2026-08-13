@@ -28,6 +28,12 @@ PUBLIC_SURFACE = frozenset({"service", "schemas"})
 # imported at a call site — only inside adapters/.
 PROVIDER_SDKS = frozenset({"httpx", "anthropic", "razorpay", "boto3", "openai"})
 
+# One deliberate exemption, and it should stay one. `db/registry.py` exists
+# precisely to import every model module so `Base.metadata` is complete before
+# anything resolves a foreign key. It imports models and does nothing else with
+# them — no queries, no logic. Anything else appearing here is a smell.
+IMPORTS_ALL_MODELS_BY_DESIGN = frozenset({"db/registry.py"})
+
 
 def _imports(path: pathlib.Path) -> list[str]:
     """Every module path imported by a file, from both import forms."""
@@ -65,6 +71,8 @@ def test_no_module_imports_another_modules_models() -> None:
     violations: list[str] = []
 
     for path in _python_files():
+        if path.relative_to(SRC).as_posix() in IMPORTS_ALL_MODELS_BY_DESIGN:
+            continue
         owner = _owning_module(path)
         for imported in _imports(path):
             bits = imported.split(".")
@@ -75,6 +83,37 @@ def test_no_module_imports_another_modules_models() -> None:
                 violations.append(f"{path.relative_to(SRC)} imports {imported}")
 
     assert not violations, "cross-module model imports:\n  " + "\n  ".join(violations)
+
+
+def test_the_model_registry_lists_every_module_with_models() -> None:
+    """A model missing from the registry is invisible to SQLAlchemy's metadata.
+
+    The symptom is a `NoReferencedTableError` at flush time, raised from some
+    *other* table's foreign key, in whichever entry point happened to import
+    less than the tests do. It hides behind import order, so it is worth a test
+    rather than a convention.
+    """
+    registry = SRC / "db" / "registry.py"
+
+    # `from hotelagent.modules.ops import models` puts the package in
+    # `node.module` and "models" in the alias, so the two must be recombined —
+    # `_imports` alone would report the package and miss the distinction.
+    tree = ast.parse(registry.read_text())
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            imported.update(f"{node.module}.{alias.name}" for alias in node.names)
+        elif isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+
+    expected = {
+        f"hotelagent.modules.{path.parent.name}.models" for path in SRC.glob("modules/*/models.py")
+    }
+    missing = expected - imported
+
+    assert not missing, "model modules absent from db/registry.py:\n  " + "\n  ".join(
+        sorted(missing)
+    )
 
 
 def test_cross_module_imports_only_touch_the_public_surface() -> None:

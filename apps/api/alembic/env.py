@@ -14,18 +14,11 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from hotelagent.config import get_settings
 
-# Importing the models is what populates Base.metadata. Autogenerate compares
-# that metadata against the live database — so a model that is not imported
-# here is invisible, and Alembic will happily generate a migration dropping the
-# table it cannot see. Every new module's models are added to this list.
-from hotelagent.db import idempotency as _idempotency  # noqa: F401
-from hotelagent.db.base import Base
-from hotelagent.modules.availability import models as _availability_models  # noqa: F401
-from hotelagent.modules.booking import models as _booking_models  # noqa: F401
-from hotelagent.modules.conversation import models as _conversation_models  # noqa: F401
-from hotelagent.modules.inventory import models as _inventory_models  # noqa: F401
-from hotelagent.modules.ops import models as _ops_models  # noqa: F401
-from hotelagent.modules.payments import models as _payments_models  # noqa: F401
+# Importing hotelagent.db.registry is what populates Base.metadata. Autogenerate
+# compares that metadata against the live database — a model missing from the
+# registry is invisible, and Alembic would generate a migration dropping the
+# table it cannot see.
+from hotelagent.db.registry import Base
 
 config = context.config
 
