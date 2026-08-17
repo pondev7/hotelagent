@@ -7,6 +7,12 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
 
 from hotelagent.enums import CallOutcome
+from hotelagent.modules.ops.models import CallTaskStatus
+
+# Re-exported for the same reason as `conversation.schemas`: `CallTaskStatus` is
+# the vocabulary of the queue, it lives beside the table whose column constrains
+# it, and `models.py` is off-limits to every other file including our router.
+__all__ = ["CallTaskStatus", "CallTaskSummary"]
 
 
 class CallTaskSummary(BaseModel):
@@ -30,7 +36,7 @@ class CallTaskSummary(BaseModel):
     check_in: date
     check_out: date
     guests: int
-    status: str
+    status: CallTaskStatus
     outcome: CallOutcome | None = None
     quoted_price: Decimal | None = None
     rooms_available: int | None = None

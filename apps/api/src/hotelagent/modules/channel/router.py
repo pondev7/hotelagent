@@ -80,12 +80,10 @@ async def receive_webhook(
     if not batch.messages:
         return {"received": 0, "duplicates": 0, "statuses": applied}
 
-    try:
-        recorded = await service.handle_inbound(session, batch)
-    except service.ChannelConfigurationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
-        ) from exc
+    # No `except` here any more. `ChannelConfigurationError` is a
+    # `ConfigurationError`, so `errors.py` answers 503 — the same status this
+    # router used to construct by hand, now decided once for every endpoint.
+    recorded = await service.handle_inbound(session, batch)
 
     return {
         "received": len(recorded),

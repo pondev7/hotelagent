@@ -182,6 +182,81 @@ def test_routers_do_not_import_models() -> None:
     assert not violations, "routers importing models:\n  " + "\n  ".join(violations)
 
 
+def test_routers_do_not_run_orm_queries() -> None:
+    """The other half of "routers are thin".
+
+    Not importing models is a proxy; this is the thing itself. A router may
+    accept a session and hand it to `service.py` — that is how the request's
+    transaction reaches the service layer — but the moment it calls
+    `session.scalar(...)` there is business logic living in the transport layer,
+    invisible to every caller that is not an HTTP request.
+
+    Matched on the verb rather than the import so that
+    `select` reaching a router through any spelling still fails.
+    """
+    query_verbs = frozenset(
+        {"execute", "scalar", "scalars", "add", "add_all", "flush", "commit", "merge", "refresh"}
+    )
+    violations: list[str] = []
+
+    for path in _python_files():
+        if path.name != "router.py":
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            if node.func.attr not in query_verbs:
+                continue
+            target = node.func.value
+            # `session.scalar(...)` and `self.session.scalar(...)` both count;
+            # `router.add_api_route(...)` and friends do not.
+            name = target.id if isinstance(target, ast.Name) else getattr(target, "attr", "")
+            if "session" in name or name == "db":
+                violations.append(
+                    f"{path.relative_to(SRC)}:{node.lineno} calls {name}.{node.func.attr}()"
+                )
+
+    assert not violations, "ORM queries inside routers:\n  " + "\n  ".join(violations)
+
+
+def test_http_exception_appears_only_in_routers() -> None:
+    """`CLAUDE.md`: *"Never raise `HTTPException` below `router.py`."*
+
+    A service that raises `HTTPException` has decided it is only ever called
+    from a web request. The same function then cannot be used from the arq
+    worker or a management command without a caller catching a web framework's
+    exception and reading a status code off it to find out what went wrong.
+
+    Services raise `HotelAgentError` subclasses instead; `errors.py` owns the
+    single translation to transport.
+
+    Read with `ast` rather than by string search, because the first draft of
+    this test failed on `channel/service.py` — where the only occurrence of the
+    word is a docstring explaining that services must not raise it. A checker
+    that cannot tell code from prose teaches people to stop writing the prose.
+    """
+    violations: list[str] = []
+
+    for path in _python_files():
+        if path.name == "router.py":
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            named = (
+                isinstance(node, ast.Name)
+                and node.id == "HTTPException"
+                or isinstance(node, ast.Attribute)
+                and node.attr == "HTTPException"
+                or isinstance(node, ast.alias)
+                and node.name == "HTTPException"
+            )
+            if named:
+                violations.append(f"{path.relative_to(SRC)}:{getattr(node, 'lineno', '?')}")
+
+    assert not violations, "HTTPException below the router layer:\n  " + "\n  ".join(violations)
+
+
 def test_only_config_reads_the_environment() -> None:
     """Invariant #9, the other half: *"Nothing reads `os.environ` directly."*
 

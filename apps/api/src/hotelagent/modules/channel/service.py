@@ -15,34 +15,55 @@ from hotelagent.adapters.channel import cloud_api, console
 from hotelagent.adapters.channel.base import ChannelAdapter
 from hotelagent.config import get_settings
 from hotelagent.enums import MessageType, SenderKind
+from hotelagent.errors import ConfigurationError, ConflictError
 from hotelagent.logging import body_shape, get_logger
 from hotelagent.modules.channel.schemas import InboundBatch, ReplyButton
 from hotelagent.modules.conversation import service as conversation_service
 from hotelagent.modules.conversation.schemas import RecordedMessage
+
+# One class for one condition. The gateway raises this when asked to reply on a
+# thread it cannot find, and `conversation` raises it when asked to write to one
+# — two classes would have given the console two codes for one situation.
+from hotelagent.modules.conversation.service import (
+    UnknownConversationError as UnknownConversationError,
+)
 from hotelagent.modules.inventory import service as inventory_service
 
 log = get_logger(__name__)
 
 
-class ChannelError(RuntimeError):
-    """Base for problems the gateway reports in its own vocabulary.
+# The gateway's errors, now parented on the shared hierarchy. What they used to
+# be — three subclasses of a local `ChannelError(RuntimeError)` — worked only
+# because one router knew all three by name and translated them in an `except`
+# clause. The status code is a property of the situation, not of the caller, so
+# it belongs on the class.
+#
+# `ChannelError` itself is gone rather than kept as a marker base: it grouped
+# three situations that map to three different status codes, so the group could
+# never be caught and handled as one thing. Nothing referenced it.
 
-    Services never raise HTTPException — that would tie them to being called
-    from a web request, and make them unusable from a worker or a CLI. The
-    router translates these into status codes.
+
+class ChannelConfigurationError(ConfigurationError):
+    """Raised when the gateway cannot do its job because config is missing.
+
+    A missing verify token, an unseeded city. 503 and not 500: the request would
+    have succeeded against a configured system, and WhatsApp's redelivery on a
+    non-2xx is then working in our favour — the message arrives once we are set
+    up, instead of being lost.
     """
 
-
-class ChannelConfigurationError(ChannelError):
-    """Raised when the gateway cannot do its job because config is missing."""
+    code = "channel_unconfigured"
 
 
-class UnknownConversationError(ChannelError):
-    """Raised when asked to reply on a conversation that does not exist."""
+class ServiceWindowExpiredError(ConflictError):
+    """Raised when a free-form reply is no longer permitted.
 
+    Outside WhatsApp's 24-hour window only approved templates may be sent and we
+    have none at M1 (`docs/vision.md` §3.8). A conflict rather than a validation
+    error: the text was fine, the clock was not.
+    """
 
-class ServiceWindowExpiredError(ChannelError):
-    """Raised when a free-form reply is no longer permitted."""
+    code = "service_window_expired"
 
 
 def parse_payload(payload: dict[str, Any]) -> InboundBatch:

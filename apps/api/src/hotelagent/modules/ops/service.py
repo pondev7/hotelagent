@@ -9,7 +9,7 @@ import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hotelagent.enums import CallOutcome
@@ -30,7 +30,7 @@ def _summary(task: CallTask) -> CallTaskSummary:
         check_in=task.check_in,
         check_out=task.check_out,
         guests=task.guests,
-        status=task.status.value,
+        status=task.status,
         outcome=task.outcome,
         quoted_price=task.quoted_price,
         rooms_available=task.rooms_available,
@@ -169,3 +169,41 @@ async def list_open_tasks(
         )
     ).all()
     return [_summary(t) for t in tasks]
+
+
+async def list_call_tasks(
+    session: AsyncSession,
+    *,
+    city_id: uuid.UUID,
+    limit: int,
+    offset: int,
+    status: CallTaskStatus | None = None,
+) -> tuple[list[CallTaskSummary], int]:
+    """The console's view of the queue: paginated, filterable, oldest first.
+
+    Oldest first, and deliberately the opposite of the inbox in
+    `conversation.list_conversations`. A call task is a promise already made to
+    a traveller who was told five minutes (`docs/vision.md` §2.2) — newest-first
+    here would mean the person who has waited longest waits longest.
+
+    Unfiltered, `status=None` returns resolved tasks too, which is what a
+    reconciliation or an audit wants. The console passes `open`, because a queue
+    that accumulates every call the desk has ever made gets slower every day
+    while showing the same handful of actionable rows.
+    """
+    scope = [CallTask.city_id == city_id]
+    if status is not None:
+        scope.append(CallTask.status == status)
+
+    total = await session.scalar(select(func.count()).select_from(CallTask).where(*scope)) or 0
+    tasks = (
+        await session.scalars(
+            select(CallTask)
+            .where(*scope)
+            .order_by(CallTask.opened_at.asc().nullslast(), CallTask.id)
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
+
+    return [_summary(task) for task in tasks], total

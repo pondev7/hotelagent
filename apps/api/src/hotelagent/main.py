@@ -9,6 +9,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,19 +17,45 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from hotelagent.config import get_settings
 from hotelagent.db import registry as _registry  # noqa: F401  (populates Base.metadata)
 from hotelagent.db.session import get_session
+from hotelagent.errors import install_error_handlers
 from hotelagent.logging import configure_logging
 from hotelagent.modules.channel.router import router as channel_router
+from hotelagent.modules.conversation.router import router as conversation_router
+from hotelagent.modules.inventory.router import router as inventory_router
+from hotelagent.modules.ops.router import router as ops_router
 
 settings = get_settings()
 
 configure_logging(json_output=settings.log_json)
 
+
+def _operation_id(route: APIRoute) -> str:
+    """Name each operation after its endpoint function.
+
+    FastAPI's default appends the path and the method —
+    `list_hotels_api_hotels_get` — which generates a TypeScript client nobody
+    wants to call and renames every function the day a route moves. The endpoint
+    name is stable, readable, and makes a rename visible in the diff.
+
+    Uniqueness is then our problem rather than FastAPI's, which is why
+    `tests/unit/test_openapi_contract.py` asserts it.
+    """
+    return route.name
+
+
 app = FastAPI(
     title="HotelAgent API",
     version="0.1.0",
+    generate_unique_id_function=_operation_id,
 )
 
+# Before the routers, so no route can be registered without them.
+install_error_handlers(app)
+
 app.include_router(channel_router)
+app.include_router(inventory_router)
+app.include_router(conversation_router)
+app.include_router(ops_router)
 
 app.add_middleware(
     CORSMiddleware,

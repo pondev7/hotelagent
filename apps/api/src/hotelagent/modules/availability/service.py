@@ -21,6 +21,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hotelagent.enums import CallOutcome, IntegrationTier
+from hotelagent.errors import NotFoundError
 from hotelagent.logging import get_logger
 from hotelagent.modules.availability.models import AvailabilityObservation
 from hotelagent.modules.availability.router import provider_for
@@ -30,6 +31,11 @@ from hotelagent.modules.availability.schemas import (
     AvailabilityStatus,
 )
 from hotelagent.modules.inventory import service as inventory_service
+
+# Imported, not redefined. Inventory owns hotels, so it owns the meaning of
+# "there is no such hotel"; this module raises it, which is a normal thing to do
+# with another module's public error and the reason `errors.py` is shared.
+from hotelagent.modules.inventory.service import UnknownHotelError as UnknownHotelError
 from hotelagent.modules.ops import service as ops_service
 
 log = get_logger(__name__)
@@ -46,12 +52,10 @@ _OUTCOME_TO_STATUS: dict[CallOutcome, AvailabilityStatus] = {
 }
 
 
-class UnknownHotelError(RuntimeError):
-    """Raised when asked about a hotel that does not exist or is inactive."""
-
-
-class UnknownCallTaskError(RuntimeError):
+class UnknownCallTaskError(NotFoundError):
     """Raised when resolving a call task that does not exist."""
+
+    code = "unknown_call_task"
 
 
 async def check_availability(

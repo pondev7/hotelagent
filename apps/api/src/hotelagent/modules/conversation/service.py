@@ -8,12 +8,13 @@ thread, storing the turn idempotently — happens behind this one function.
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hotelagent.db.idempotency import run_once
 from hotelagent.enums import Channel, MessageType, SenderKind
+from hotelagent.errors import NotFoundError
 from hotelagent.modules.conversation.models import (
     Conversation,
     ConversationState,
@@ -21,7 +22,27 @@ from hotelagent.modules.conversation.models import (
     MessageDirection,
     User,
 )
-from hotelagent.modules.conversation.schemas import RecordedMessage
+from hotelagent.modules.conversation.schemas import (
+    ConversationSummary,
+    MessageOut,
+    RecordedMessage,
+)
+
+
+class UnknownConversationError(NotFoundError):
+    """Raised when asked about a conversation that does not exist here.
+
+    "Here" includes the city: a conversation belonging to another city is
+    reported absent rather than forbidden, because a 403 would confirm it exists.
+
+    Defined in this module because conversation owns the entity. The channel
+    gateway imports it — it raises the same error when asked to reply on a
+    thread it cannot find, and two classes for one condition would give the
+    console two codes to handle for one situation.
+    """
+
+    code = "unknown_conversation"
+
 
 # WhatsApp permits free-form replies for 24 hours after the customer's last
 # message; outside it, only paid templates (`docs/vision.md` §3.8). Stored on
@@ -172,7 +193,7 @@ async def record_outbound(
     """
     conversation = await session.get(Conversation, conversation_id)
     if conversation is None:
-        raise ValueError(f"conversation {conversation_id} does not exist")
+        raise UnknownConversationError(f"conversation {conversation_id} does not exist")
 
     now = datetime.now(UTC)
     message = Message(
@@ -258,6 +279,134 @@ async def apply_delivery_status(
 
     await session.flush()
     return True
+
+
+def _summary(conversation: Conversation, display_name: str | None) -> ConversationSummary:
+    return ConversationSummary(
+        conversation_id=conversation.id,
+        city_id=conversation.city_id,
+        user_id=conversation.user_id,
+        channel=conversation.channel,
+        state=conversation.state,
+        automation_level=conversation.automation_level,
+        language=conversation.language,
+        current_intent=conversation.current_intent,
+        display_name=display_name,
+        last_inbound_at=conversation.last_inbound_at,
+        last_outbound_at=conversation.last_outbound_at,
+        service_window_expires_at=conversation.service_window_expires_at,
+    )
+
+
+def _out(message: Message) -> MessageOut:
+    return MessageOut(
+        message_id=message.id,
+        conversation_id=message.conversation_id,
+        direction=message.direction,
+        sender_kind=message.sender_kind,
+        message_type=message.message_type,
+        body=message.body,
+        attachments=message.attachments,
+        sent_at=message.sent_at,
+        delivered_at=message.delivered_at,
+        read_at=message.read_at,
+        failed_reason=message.failed_reason,
+    )
+
+
+async def list_conversations(
+    session: AsyncSession,
+    *,
+    city_id: uuid.UUID,
+    limit: int,
+    offset: int,
+    state: ConversationState | None = None,
+) -> tuple[list[ConversationSummary], int]:
+    """The unified inbox for one city, most recently active first.
+
+    That ordering is the product, not a preference. HotelAgent is specified as a
+    response-time contract (`docs/vision.md` §2.2), so an operator working the
+    list top-down must be working the person who is currently waiting on us —
+    not the oldest thread in the city. Note the call-task queue in `ops` sorts
+    the opposite way, and for the same underlying reason.
+
+    Joined to `User` for the display name: the inbox is unusable if every row
+    reads as a UUID, and one join here saves the console N follow-up requests.
+    """
+    scope = [Conversation.city_id == city_id]
+    if state is not None:
+        scope.append(Conversation.state == state)
+
+    total = await session.scalar(select(func.count()).select_from(Conversation).where(*scope)) or 0
+    rows = (
+        await session.execute(
+            select(Conversation, User.display_name)
+            .join(User, User.id == Conversation.user_id)
+            .where(*scope)
+            # `id` breaks the tie. Without it two conversations sharing a
+            # timestamp can land on both page one and page two, or on neither.
+            .order_by(Conversation.last_inbound_at.desc().nullslast(), Conversation.id)
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
+
+    return [_summary(conversation, display_name) for conversation, display_name in rows], total
+
+
+async def list_messages(
+    session: AsyncSession,
+    *,
+    conversation_id: uuid.UUID,
+    city_id: uuid.UUID,
+    limit: int,
+    offset: int,
+) -> tuple[list[MessageOut], int]:
+    """One transcript, oldest first — because it is a conversation.
+
+    The city is checked before the messages are read, and an out-of-city
+    conversation raises rather than returning an empty page. Empty would be
+    indistinguishable from a thread with no messages yet, which is a real state,
+    and it would quietly hide a scoping bug instead of surfacing it.
+    """
+    owner_city = await session.scalar(
+        select(Conversation.city_id).where(Conversation.id == conversation_id)
+    )
+    if owner_city is None or owner_city != city_id:
+        raise UnknownConversationError(f"conversation {conversation_id} is not in city {city_id}")
+
+    scope = Message.conversation_id == conversation_id
+
+    total = await session.scalar(select(func.count()).select_from(Message).where(scope)) or 0
+    messages = (
+        await session.scalars(
+            select(Message)
+            .where(scope)
+            .order_by(Message.sent_at.asc().nullslast(), Message.id)
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
+
+    return [_out(message) for message in messages], total
+
+
+async def get_conversation(
+    session: AsyncSession, *, conversation_id: uuid.UUID, city_id: uuid.UUID
+) -> ConversationSummary:
+    """One conversation, scoped to the asking city."""
+    row = (
+        await session.execute(
+            select(Conversation, User.display_name)
+            .join(User, User.id == Conversation.user_id)
+            .where(Conversation.id == conversation_id, Conversation.city_id == city_id)
+        )
+    ).first()
+    if row is None:
+        raise UnknownConversationError(f"conversation {conversation_id} is not in city {city_id}")
+
+    conversation, display_name = row
+    return _summary(conversation, display_name)
 
 
 async def set_language(session: AsyncSession, *, conversation_id: uuid.UUID, language: str) -> None:

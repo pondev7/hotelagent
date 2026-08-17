@@ -36,9 +36,16 @@ migration: ## Autogenerate a new revision — make migration m="add hotels"
 	@test -n "$(m)" || (echo 'usage: make migration m="describe the change"'; exit 1)
 	uv run alembic -c apps/api/alembic.ini revision --autogenerate -m "$(m)"
 
+# Three steps, each of which must be able to fail loudly: dump the schema from
+# the Python app, generate types from it, then typecheck them. The last step is
+# what makes this a contract rather than a code dump — `src/index.ts` names the
+# schemas it expects, so a rename on the Python side fails here instead of
+# silently degrading a console component to `any`.
 contracts: ## Regenerate packages/contracts/ TS types from OpenAPI
-	@echo "not wired yet — arrives with the first real API surface (M1 slice 3)"
-	@exit 1
+	uv run python apps/api/scripts/export_openapi.py packages/contracts/openapi.json
+	npm --prefix packages/contracts install --no-audit --no-fund --silent
+	npm --prefix packages/contracts run generate
+	npm --prefix packages/contracts run typecheck
 
 eval: ## Eval suite (M2 onward; a no-op stub today)
 	@echo "eval suite is a no-op stub until M2"
