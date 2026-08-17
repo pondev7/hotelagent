@@ -65,7 +65,7 @@ Each learning file follows this structure:
 | S04 | Channel gateway — inbound | ✅ built (`8fe117b`) | ✅ [m1-s04](learning/m1-s04-channel-gateway-inbound.md) |
 | S05 | Channel gateway — outbound and conversation state | ✅ built (`33c935b`) | ✅ [m1-s05](learning/m1-s05-channel-outbound.md) |
 | S06 | Availability router and the manual provider | ✅ built (`5aa8feb`) | ✅ [m1-s06](learning/m1-s06-availability-router.md) |
-| S07 | API surface and generated contracts | ⬜ | ⬜ |
+| S07 | API surface and generated contracts | ✅ built (`00ae0f1`) | ✅ [m1-s07](learning/m1-s07-api-surface.md) |
 | S08 | Ops console shell and hotel directory | ⬜ | ⬜ |
 | S09 | Unified inbox and canned phrases | ⬜ | ⬜ |
 | S10 | Call-task queue | ⬜ | ⬜ |
