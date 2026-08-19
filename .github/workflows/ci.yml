@@ -69,8 +69,65 @@ jobs:
         # a dependency added without regenerating the lockfile.
         run: uv sync --frozen
 
+      # `lint-api`/`test-api` rather than `lint`/`test`: those now also drive the
+      # console, and this job has no Node toolchain to do it with. The `ops` job
+      # runs the other half, in parallel, so a Python failure and a TypeScript
+      # failure are two red jobs rather than one confusing one.
       - name: Lint (ruff check, ruff format --check, mypy)
-        run: make lint
+        run: make lint-api
 
       - name: Test
-        run: make test
+        run: make test-api
+
+  ops:
+    name: Ops console — typecheck, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # Python is here to generate TypeScript, which reads like a mistake and is
+      # not: `packages/contracts/src/generated.ts` is gitignored and derived from
+      # the API's OpenAPI document, so producing it means importing the FastAPI
+      # app. The alternative — committing the generated file — trades this
+      # toolchain for merge conflicts in a machine-written 1000-line file.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.x"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install Python 3.12
+        run: uv python install 3.12
+
+      - name: Install Python dependencies
+        run: uv sync --frozen
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            apps/ops/package-lock.json
+            packages/contracts/package-lock.json
+
+      # Regenerates the contracts and fails if the generated types no longer
+      # typecheck against the names `src/index.ts` expects — the drift check.
+      - name: Generate contracts
+        run: make contracts
+
+      - name: Typecheck the console
+        run: make lint-ops
+
+      - name: Test the console
+        run: make test-ops
+
+      # The build is a third distinct check: `tsc` does not catch a server
+      # component that imports a client-only hook, or a page that fails to
+      # prerender. Those surface here and nowhere else.
+      - name: Build the console
+        run: npm --prefix apps/ops run build

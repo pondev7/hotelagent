@@ -9,6 +9,28 @@ from hotelagent.enums import IntegrationTier
 from hotelagent.modules.inventory.models import VerificationStatus
 
 
+class CitySummary(BaseModel):
+    """A market, as the console's city switcher shows it.
+
+    The console needs this because every other collection requires a `city_id`
+    and there is no way to guess one: ids are uuid7 values minted when a city
+    row is created, so they differ between a laptop, CI and production. Baking
+    one into the frontend build would make the console environment-specific,
+    which is how a staging console ends up pointed at a production city.
+
+    `timezone` travels with the city rather than being a console constant.
+    Kanyakumari and Madurai share one today; the check-in time an operator reads
+    off a screen must be the hotel's local time, not the browser's.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    city_id: uuid.UUID
+    name: str
+    slug: str
+    timezone: str
+
+
 class HotelAvailabilityContext(BaseModel):
     """What the availability router needs to know about a hotel.
 

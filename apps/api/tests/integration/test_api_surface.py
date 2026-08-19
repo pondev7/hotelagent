@@ -456,3 +456,119 @@ async def test_replying_on_an_unknown_conversation_raises_a_typed_error(
             sender_kind=SenderKind.OPERATOR,
             text="hello",
         )
+
+
+# --------------------------------------------------------------------------
+# S08 — what the ops console needs before it can render a directory
+# --------------------------------------------------------------------------
+
+
+async def test_the_city_list_names_every_active_city(
+    session: AsyncSession, seeded_city: uuid.UUID, client: httpx.AsyncClient
+) -> None:
+    """The console's entry point.
+
+    Every other collection requires a `city_id`, and until this endpoint existed
+    the console had no way to obtain one — the id is a uuid7 minted at seed time,
+    so it differs per environment and cannot be baked into a build.
+    """
+    await _city(session, name="Madurai", slug="madurai")
+
+    response = await client.get("/api/cities")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [city["name"] for city in body] == ["Kanyakumari", "Madurai"]
+    assert str(seeded_city) in {city["city_id"] for city in body}
+
+
+async def test_an_inactive_city_is_not_offered(
+    session: AsyncSession, seeded_city: uuid.UUID, client: httpx.AsyncClient
+) -> None:
+    """A city we have wound down is not a city an operator can be scoped to.
+
+    `is_active` is on the row rather than the row being deleted, because the
+    bookings and the ledger entries beneath it must survive. The filter is what
+    stops that soft delete from being decorative.
+    """
+    city = City(name="Madurai", slug="madurai", is_active=False)
+    session.add(city)
+    await session.flush()
+
+    response = await client.get("/api/cities")
+
+    assert response.status_code == 200
+    assert [city["name"] for city in response.json()] == ["Kanyakumari"]
+
+
+async def test_the_directory_filters_by_tier(
+    session: AsyncSession, seeded_city: uuid.UUID, client: httpx.AsyncClient
+) -> None:
+    """Filtering happens in the query, not in the browser.
+
+    The alternative — fetch a page and filter it in React — quietly filters only
+    the rows that happen to be on the current page, and reports a `total` that
+    counts the ones it hid. Correct at five hotels and wrong at fifty, which is
+    the worst kind of wrong: it ships.
+    """
+    await _hotel(session, seeded_city, name="Sea Breeze Residency", tier=IntegrationTier.MANUAL)
+    await _hotel(session, seeded_city, name="Cape Comorin Grand", tier=IntegrationTier.LIVE)
+    await _hotel(session, seeded_city, name="Vivekananda Residency", tier=IntegrationTier.BOT)
+
+    response = await client.get(
+        "/api/hotels", params={"city_id": str(seeded_city), "tier": "manual"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1, "total must count the filtered rows, not all of them"
+    assert [item["name"] for item in body["items"]] == ["Sea Breeze Residency"]
+
+
+async def test_the_tier_filter_stacks_with_the_city_scope(
+    session: AsyncSession, seeded_city: uuid.UUID, client: httpx.AsyncClient
+) -> None:
+    """A new filter is the classic way a tenancy scope gets dropped.
+
+    Both predicates have to survive together: filtering by tier across all
+    cities would be a leak that the tier test above would not catch.
+    """
+    other_city = await _city(session, name="Madurai", slug="madurai")
+    await _hotel(session, seeded_city, name="Sea Breeze Residency", tier=IntegrationTier.MANUAL)
+    await _hotel(session, other_city, name="Meenakshi Lodge", tier=IntegrationTier.MANUAL)
+
+    response = await client.get(
+        "/api/hotels", params={"city_id": str(seeded_city), "tier": "manual"}
+    )
+
+    assert response.status_code == 200
+    assert [item["name"] for item in response.json()["items"]] == ["Sea Breeze Residency"]
+
+
+async def test_no_tier_filter_returns_every_tier(
+    session: AsyncSession, seeded_city: uuid.UUID, client: httpx.AsyncClient
+) -> None:
+    """The parameter is optional, and omitting it must not narrow anything."""
+    await _hotel(session, seeded_city, name="Sea Breeze Residency", tier=IntegrationTier.MANUAL)
+    await _hotel(session, seeded_city, name="Cape Comorin Grand", tier=IntegrationTier.LIVE)
+
+    response = await client.get("/api/hotels", params={"city_id": str(seeded_city)})
+
+    assert response.json()["total"] == 2
+
+
+async def test_an_unknown_tier_is_a_validation_error(
+    session: AsyncSession, seeded_city: uuid.UUID, client: httpx.AsyncClient
+) -> None:
+    """`?tier=manaul` is a 422, not an empty directory.
+
+    An unconstrained string would return zero hotels and look exactly like a
+    city with no manual hotels in it. The enum turns a typo into a loud failure
+    at the edge, in our own error envelope.
+    """
+    response = await client.get(
+        "/api/hotels", params={"city_id": str(seeded_city), "tier": "manaul"}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_request"

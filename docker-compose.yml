@@ -34,6 +34,11 @@ services:
       context: ./apps/ops
     command: npm run dev
     environment:
+      # Two URLs for one API, because two different machines ask for it. The
+      # console renders on the server, inside this container, where the API is
+      # reachable as `api` on the Compose network. NEXT_PUBLIC_* is inlined into
+      # the browser bundle, and a browser on the host can only see localhost.
+      OPS_API_BASE_URL: http://api:8000
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
     ports:
       - "3000:3000"

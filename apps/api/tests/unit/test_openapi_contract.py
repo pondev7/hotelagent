@@ -88,9 +88,10 @@ def _query_parameters(operation: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def test_the_console_api_exists(schema: dict[str, Any]) -> None:
-    """The four resources S07 promises: hotels, conversations, messages, call tasks."""
+    """The four resources S07 promises, plus the city list S08 added."""
     paths = set(schema["paths"])
 
+    assert "/api/cities" in paths
     assert "/api/hotels" in paths
     assert "/api/hotels/{hotel_id}" in paths
     assert "/api/conversations" in paths
@@ -185,3 +186,47 @@ def test_the_error_envelope_is_part_of_the_published_schema(schema: dict[str, An
 
     assert "ErrorEnvelope" in components
     assert set(_resolve(schema, components["ErrorEnvelope"]).get("properties", {})) == {"error"}
+
+
+def test_the_city_list_is_the_one_endpoint_that_takes_no_city(schema: dict[str, Any]) -> None:
+    """The tenancy root cannot be scoped by tenancy.
+
+    Every other collection requires a `city_id`; this is the endpoint that tells
+    the console which ones exist, so requiring one would be circular. That makes
+    it the single most likely place for the scoping rule to be quietly widened,
+    which is why the exception is asserted rather than merely allowed.
+
+    It deliberately returns a bare array rather than a `Page`. Cities are a
+    bounded set — one today, a handful ever — so there is nothing to paginate,
+    and staying outside the page envelope keeps it outside
+    `_list_operations()` too. The alternative was an allowlist in
+    `test_every_list_endpoint_requires_a_city`, and an allowlist on a tenancy
+    check is exactly the thing that rots into a leak.
+    """
+    operation = schema["paths"]["/api/cities"]["get"]
+
+    assert "city_id" not in _query_parameters(operation)
+
+    body = operation["responses"]["200"]["content"]["application/json"]["schema"]
+    assert body.get("type") == "array", "the city list must not become a Page"
+
+
+def test_the_hotel_directory_can_filter_by_tier(schema: dict[str, Any]) -> None:
+    """S08's directory filters server-side, and only by known tiers.
+
+    Typed as the enum rather than as a string, matching `?state=` on the inbox:
+    `?tier=manaul` is then a 422 before any handler runs, instead of a silently
+    empty directory that reads as "we have no manual hotels".
+    """
+    parameter = _query_parameters(schema["paths"]["/api/hotels"]["get"])["tier"]
+
+    assert parameter["required"] is False
+
+    # Optional, so FastAPI publishes `anyOf: [$ref IntegrationTier, null]`
+    # rather than inlining the enum. The `$ref` is the thing being asserted:
+    # a plain `type: string` here would accept `?tier=manaul` and answer it
+    # with an empty directory.
+    referenced = [option for option in parameter["schema"]["anyOf"] if "$ref" in option]
+    assert referenced, "tier must reference the IntegrationTier enum, not be a free string"
+
+    assert set(_resolve(schema, referenced[0])["enum"]) == {"live", "bot", "manual"}

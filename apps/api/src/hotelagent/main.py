@@ -21,6 +21,7 @@ from hotelagent.errors import install_error_handlers
 from hotelagent.logging import configure_logging
 from hotelagent.modules.channel.router import router as channel_router
 from hotelagent.modules.conversation.router import router as conversation_router
+from hotelagent.modules.inventory.router import cities_router
 from hotelagent.modules.inventory.router import router as inventory_router
 from hotelagent.modules.ops.router import router as ops_router
 
@@ -53,6 +54,7 @@ app = FastAPI(
 install_error_handlers(app)
 
 app.include_router(channel_router)
+app.include_router(cities_router)
 app.include_router(inventory_router)
 app.include_router(conversation_router)
 app.include_router(ops_router)
