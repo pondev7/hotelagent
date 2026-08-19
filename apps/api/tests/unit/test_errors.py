@@ -22,6 +22,7 @@ needs two failure paths.
 
 import pytest
 from fastapi import FastAPI
+
 from hotelagent.errors import (
     ConfigurationError,
     ConflictError,
