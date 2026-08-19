@@ -69,3 +69,4 @@ The concrete trigger that makes this worth reopening.
 | [0003](0003-no-agent-framework.md) | Anthropic SDK directly, no agent framework | Accepted |
 | [0004](0004-postgres-only-datastore.md) | PostgreSQL + pgvector as the only datastore | Accepted |
 | [0005](0005-console-api-conventions.md) | Console API conventions: city scoping, one error envelope, generated types | Accepted |
+| [0006](0006-console-renders-on-the-server.md) | Console renders on the server; cities come from the API | Accepted |

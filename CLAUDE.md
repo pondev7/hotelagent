@@ -83,11 +83,12 @@ other terminal".
 | Command | Does |
 |---|---|
 | `make dev` | Full stack up via Docker Compose (api, worker, ops, postgres, redis, langfuse) |
-| `make test` | pytest, API |
-| `make lint` | ruff + ruff format --check + mypy |
+| `make test` | pytest (API) + vitest (ops console). `test-api` / `test-ops` run one half |
+| `make lint` | ruff + ruff format --check + mypy, then the console's `tsc --noEmit`. `lint-api` / `lint-ops` run one half |
 | `make fmt` | ruff format + ruff check --fix |
 | `make migrate` | Apply Alembic migrations |
 | `make migration m="..."` | Autogenerate a new revision |
+| `make seed` | Idempotent development data: one city, a few hotels |
 | `make contracts` | Regenerate `packages/contracts/` TS types from OpenAPI |
 | `make eval` | Eval suite (M2 onward; a no-op stub today) |
 | `make deploy` | The single deploy command, identical everywhere |

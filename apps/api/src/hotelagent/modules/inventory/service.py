@@ -10,9 +10,14 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from hotelagent.enums import IntegrationTier
 from hotelagent.errors import NotFoundError
 from hotelagent.modules.inventory.models import City, Hotel
-from hotelagent.modules.inventory.schemas import HotelAvailabilityContext, HotelSummary
+from hotelagent.modules.inventory.schemas import (
+    CitySummary,
+    HotelAvailabilityContext,
+    HotelSummary,
+)
 
 
 class UnknownHotelError(NotFoundError):
@@ -42,6 +47,29 @@ async def get_city_id_by_slug(session: AsyncSession, slug: str) -> uuid.UUID | N
         select(City.id).where(City.slug == slug, City.is_active)
     )
     return city_id
+
+
+async def list_cities(session: AsyncSession) -> list[CitySummary]:
+    """Every city an operator may be scoped to.
+
+    The one collection in the API that takes no `city_id`, because it is the
+    tenancy root — asking "which cities exist, in city X?" is circular. That
+    makes it the natural place for the scoping rule to be accidentally widened
+    later, so `tests/unit/test_openapi_contract.py` asserts the exception
+    explicitly rather than leaving it to be noticed.
+
+    Unpaginated for the same reason it is unscoped: this is a bounded set. One
+    row today and a handful ever, ordered by name so the switcher does not
+    reshuffle itself as cities are added.
+    """
+    cities = (
+        await session.scalars(select(City).where(City.is_active).order_by(City.name, City.id))
+    ).all()
+
+    return [
+        CitySummary(city_id=city.id, name=city.name, slug=city.slug, timezone=city.timezone)
+        for city in cities
+    ]
 
 
 async def get_hotel_for_availability(
@@ -80,7 +108,12 @@ def _summary(hotel: Hotel) -> HotelSummary:
 
 
 async def list_hotels(
-    session: AsyncSession, *, city_id: uuid.UUID, limit: int, offset: int
+    session: AsyncSession,
+    *,
+    city_id: uuid.UUID,
+    tier: IntegrationTier | None = None,
+    limit: int,
+    offset: int,
 ) -> tuple[list[HotelSummary], int]:
     """The directory for one city, and the count of rows behind it.
 
@@ -90,13 +123,24 @@ async def list_hotels(
 
     `city_id` is a parameter and not a default: every caller must say which city
     it means (invariant #1), and there is no code path that can forget to.
-    """
-    scope = Hotel.city_id == city_id
 
-    total = await session.scalar(select(func.count()).select_from(Hotel).where(scope)) or 0
+    `tier` filters in SQL, and both predicates are applied to the count as well
+    as to the page. Filtering in the console instead would hide rows from the
+    current page while still reporting the unfiltered `total` — a bug that is
+    invisible in a five-hotel city and obvious in a fifty-hotel one.
+    """
+    predicates = [Hotel.city_id == city_id]
+    if tier is not None:
+        predicates.append(Hotel.integration_tier == tier)
+
+    total = await session.scalar(select(func.count()).select_from(Hotel).where(*predicates)) or 0
     hotels = (
         await session.scalars(
-            select(Hotel).where(scope).order_by(Hotel.name, Hotel.id).limit(limit).offset(offset)
+            select(Hotel)
+            .where(*predicates)
+            .order_by(Hotel.name, Hotel.id)
+            .limit(limit)
+            .offset(offset)
         )
     ).all()
 
